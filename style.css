@@ -1,0 +1,138 @@
+/* =========================================================
+   1. 全体の背景・フォント設定（色を変えたい場合はここを編集）
+   ========================================================= */
+.stApp {
+    background-color: #f8fafc; /* 全体の背景色（薄いブルーグレー） */
+    color: #1e293b;            /* 基本の文字色（濃いネイビーグレー） */
+}
+
+/* 検索エンジン避け・ヘッダー装飾 */
+.app-header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+    color: #ffffff;
+    padding: 1.5rem 2rem;
+    border-radius: 14px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 15px rgba(15, 23, 42, 0.12);
+}
+.app-header h1 {
+    font-size: 1.65rem;
+    font-weight: 800;
+    margin: 0 0 0.4rem 0;
+    color: #ffffff !important;
+}
+.app-header p {
+    font-size: 0.92rem;
+    color: #cbd5e1;
+    margin: 0;
+}
+
+/* =========================================================
+   2. サマリーKPIカード（25歳・管理職昇格時・50歳）
+   ========================================================= */
+.kpi-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-top: 4px solid #2563eb; /* カード上部のアクセントライン色 */
+    border-radius: 12px;
+    padding: 1.1rem 1.2rem;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    margin-bottom: 1rem;
+}
+.kpi-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #64748b;
+    margin-bottom: 0.3rem;
+}
+.kpi-value {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 0.2rem;
+}
+.kpi-sub {
+    font-size: 0.78rem;
+    color: #475569;
+}
+
+/* =========================================================
+   3. セクション1：文面レポート（概要 ＆ 主要転換点カード）
+   ========================================================= */
+.summary-box {
+    background-color: #ffffff;
+    border-left: 5px solid #1e40af;
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    line-height: 1.75;
+    font-size: 0.95rem;
+}
+.summary-box-title {
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: #1e3a8a;
+    margin-bottom: 0.5rem;
+}
+
+/* 転換点ごとの解説カード */
+.turning-point-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.85rem;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+    transition: transform 0.15s ease;
+}
+.turning-point-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+}
+.tp-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.45rem;
+}
+.tp-badge {
+    background-color: #dbeafe;
+    color: #1d4ed8;
+    font-weight: 700;
+    font-size: 0.78rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+}
+.tp-badge-manager {
+    background-color: #fef3c7;
+    color: #b45309;
+    font-weight: 800;
+    font-size: 0.78rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+}
+.tp-title {
+    font-weight: 700;
+    font-size: 0.98rem;
+    color: #0f172a;
+}
+.tp-desc {
+    font-size: 0.9rem;
+    color: #334155;
+    line-height: 1.65;
+    margin: 0;
+}
+
+/* =========================================================
+   4. ログイン画面（合言葉ゲート）のカード装飾
+   ========================================================= */
+.login-box {
+    background: #ffffff;
+    padding: 2rem;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    text-align: center;
+    margin-top: 2rem;
+}
