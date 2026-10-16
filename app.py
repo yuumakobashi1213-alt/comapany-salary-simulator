@@ -89,44 +89,60 @@ def get_gemini_client():
 
 
 def extract_json_from_text(text: str) -> dict:
-    """AIの応答テキストから安全にJSONオブジェクトを抽出する"""
-    cleaned = re.sub(r"```json\s*", "", text)
+    """AIの応答テキストから安全にJSONオブジェクトを抽出・自動整形する"""
+    if not text:
+        raise ValueError("AIからの応答テキストが空でした。")
+
+    cleaned = re.sub(r"```json\s*", "", text, flags=re.IGNORECASE)
     cleaned = re.sub(r"```\s*", "", cleaned).strip()
-    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-    if match:
-        return json.loads(match.group(0))
+
+    start_idx = cleaned.find("{")
+    end_idx = cleaned.rfind("}")
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        cleaned = cleaned[start_idx : end_idx + 1]
+
+    # よくあるJSONの末尾カンマエラー（,} や ,]）を自動除去
+    cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
     return json.loads(cleaned)
+
+
+def get_available_flash_models(client) -> list:
+    """
+    gemini-3.8-flash を最優先にしつつ、APIキーで実際に利用可能なモデル一覧を自動取得する。
+    廃止された gemini-2.5-flash は除外する。
+    """
+    preferred = ["gemini-3.8-flash"]
+    try:
+        for m in client.models.list():
+            name = getattr(m, "name", "")
+            short_name = name.replace("models/", "")
+            # 廃止モデルや特殊用途モデルを除外し、flash系モデルを追加
+            if (
+                "flash" in short_name.lower()
+                and "2.5" not in short_name
+                and "2.0" not in short_name
+                and "1.5" not in short_name
+                and "tts" not in short_name.lower()
+                and "image" not in short_name.lower()
+                and "audio" not in short_name.lower()
+                and short_name not in preferred
+            ):
+                preferred.append(short_name)
+    except Exception:
+        pass
+    return preferred
 
 
 def call_gemini_json(prompt: str) -> dict:
     """
-    無料枠で使える最新の gemini-3.8-flash 等を優先順で呼び出す。
-    Google検索グラウンディングを優先試行し、環境制限時は標準JSONモードへ自動フォールバックする。
+    最新の gemini-3.8-flash 等でJSONデータを取得する。
     """
     client = get_gemini_client()
-    candidate_models = [
-        "gemini-3.8-flash",
-        "gemini-flash-latest",
-        "gemini-2.5-flash",
-    ]
+    candidate_models = get_available_flash_models(client)
+    error_logs = []
 
-    last_error = None
     for model_name in candidate_models:
-        # 1st Try: Google検索グラウンディング付きで最新の実態を調査
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    tools=[types.Tool(google_search=types.GoogleSearch())],
-                    temperature=0.2,
-                ),
-            )
-            return extract_json_from_text(response.text)
-        except Exception:
-            pass
-
-        # 2nd Try: 標準JSON構造化モードで確実に返す
+        # 1st Try: 標準JSON構造化モード（最も安定して確実にJSONを返すモード）
         try:
             response = client.models.generate_content(
                 model=model_name,
@@ -137,11 +153,23 @@ def call_gemini_json(prompt: str) -> dict:
                 ),
             )
             return extract_json_from_text(response.text)
-        except Exception as e:
-            last_error = e
-            continue
+        except Exception as e1:
+            error_logs.append(f"[{model_name} / JSONモード]: {e1}")
 
-    raise RuntimeError(f"AIモデルからの応答取得に失敗しました。詳細: {last_error}")
+        # 2nd Try: 通常テキスト生成モード（JSONモード非対応モデル用のフォールバック）
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                ),
+            )
+            return extract_json_from_text(response.text)
+        except Exception as e2:
+            error_logs.append(f"[{model_name} / 通常モード]: {e2}")
+
+    raise RuntimeError(" / ".join(error_logs))
 
 
 # ==========================================
@@ -199,7 +227,7 @@ def generate_career_simulation(
 
     prompt = f"""
 あなたは日本企業の人事制度・グレード別賃金テーブルの設計専門家です。
-以下の企業・職種・個人評価に基づき、22歳（新卒入社）から50歳までの**「役職昇進イベント駆動型タイムライン」**と**「解説レポート」**をJSON形式のみで出力してください。
+以下の企業・職種・個人評価に基づき、22歳（新卒入社）から50歳までの「役職昇進イベント駆動型タイムライン」と「解説レポート」をJSON形式のみで出力してください。
 
 【対象条件】
 - 企業名：{company_data["company_official_name"]}（有報平均年収目安：{company_data["average_annual_income"]}万円 / 平均年齢：{company_data["average_age"]}歳）
@@ -211,15 +239,15 @@ def generate_career_simulation(
 
 【タイムライン構築の厳守ルール（最重要）】
 1. 固定の5年刻みではなく、この企業の実際の役職ラダー（例：商社ならS3→S2→S1→Mグレード→室長→部長、コンサルならアナリスト/C→SC→M→SM→パートナー、メーカーなら担当→主任→係長→課長→次長→部長）を反映すること。
-2. 選択された「想定評価（{eval_desc}）」に合わせて、**何歳でどの役職に昇進するか（昇進スピードと到達上限キャップ）**をリアルに推定すること。
+2. 選択された「想定評価（{eval_desc}）」に合わせて、何歳でどの役職に昇進するか（昇進スピードと到達上限キャップ）をリアルに推定すること。
 3. 出力するチェックポイント（行）は以下のルールで構成すること：
    - ① 22歳【入社】（初年度）
    - ② 各役職への【昇進】時（その役職の下限スタート基本給＆賞与）
    - ③ 各役職の［昇進の3年後］（同一役職内での習熟号俸アップ＆賞与フル化。※ただし3年以内に次の役職へ昇進する場合はスキップして次の【昇進】を出す）
    - ④ 50歳【到達】（最終到達役職でのキャップ・安定状態）
    ※合計で8〜11個のチェックポイント（年齢昇順）にすること。
-4. 各チェックポイントの数値は**「現在価値ベース（インフレ率0%、残業代を除いた基本給と賞与）」**で出力すること（残業代とインフレ底上げはPythonエンジン側で精密計算するため、`base_salary_real` には追加残業代を混ぜないこと。ただしみなし残業制の企業で基本給に固定残業代が内包されている場合はその基本給年額とする）。
-5. 管理職（労働基準法上の管理監督者：課長、Mグレード、マネージャー以上）の役職では必ず `"is_manager": true` にし、それ未満の非管理職では `"is_manager": false` にすること。
+4. 各チェックポイントの数値は「現在価値ベース（インフレ率0%、残業代を除いた基本給と賞与）」で出力すること（残業代とインフレ底上げはPythonエンジン側で精密計算するため、base_salary_real には追加残業代を混ぜないこと。ただしみなし残業制の企業で基本給に固定残業代が内包されている場合はその基本給年額とする）。
+5. 管理職（労働基準法上の管理監督者：課長、Mグレード、マネージャー以上）の役職では必ず "is_manager": true にし、それ未満の非管理職では "is_manager": false にすること。
 
 【出力JSONスキーマ】
 {{
