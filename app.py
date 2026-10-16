@@ -17,11 +17,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+
 def load_custom_css():
     css_path = Path(__file__).parent / "style.css"
     if css_path.exists():
         with open(css_path, "r", encoding="utf-8") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
 
 load_custom_css()
 
@@ -98,34 +100,48 @@ def extract_json_from_text(text: str) -> dict:
 
 def call_gemini_json(prompt: str) -> dict:
     """
-    無料枠の gemini-2.5-flash を呼び出す。
+    無料枠で使える最新の gemini-3.8-flash 等を優先順で呼び出す。
     Google検索グラウンディングを優先試行し、環境制限時は標準JSONモードへ自動フォールバックする。
     """
     client = get_gemini_client()
-    model_name = "gemini-2.5-flash"
+    candidate_models = [
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
+        "gemini-2.5-flash",
+    ]
 
-    # 1st Try: Google検索グラウンディング付きで最新の実態を調査
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())],
-                temperature=0.2,
-            ),
-        )
-        return extract_json_from_text(response.text)
-    except Exception:
-        # 2nd Try: 検索ツールが無料枠制限等で弾かれた場合は標準JSON構造化モードで確実に返す
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.2,
-            ),
-        )
-        return extract_json_from_text(response.text)
+    last_error = None
+    for model_name in candidate_models:
+        # 1st Try: Google検索グラウンディング付きで最新の実態を調査
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    temperature=0.2,
+                ),
+            )
+            return extract_json_from_text(response.text)
+        except Exception:
+            pass
+
+        # 2nd Try: 標準JSON構造化モードで確実に返す
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.2,
+                ),
+            )
+            return extract_json_from_text(response.text)
+        except Exception as e:
+            last_error = e
+            continue
+
+    raise RuntimeError(f"AIモデルからの応答取得に失敗しました。詳細: {last_error}")
 
 
 # ==========================================
@@ -505,7 +521,11 @@ else:
     # ==========================================================
     # 【エリア 2】3階建て積み上げグラフ（Plotlyインタラクティブ）
     # ==========================================================
-    mode_label = "現在価値ベース（インフレ0%）" if inflation_rate == 0 else f"将来名目値（年+{inflation_rate}%底上げ込）"
+    mode_label = (
+        "現在価値ベース（インフレ0%）"
+        if inflation_rate == 0
+        else f"将来名目値（年+{inflation_rate}%底上げ込）"
+    )
     st.subheader(f"📊 2. 昇進タイムライン別・3階建て年収推移グラフ（{mode_label}）")
 
     fig = go.Figure()
@@ -583,7 +603,9 @@ else:
         {
             "年齢・イベント": df_calc["age_event"],
             "到達役職（グレード）": df_calc["rank_title"],
-            "管理職判定": df_calc["is_manager"].apply(lambda m: "管理職（残業0）" if m else "非管理職"),
+            "管理職判定": df_calc["is_manager"].apply(
+                lambda m: "管理職（残業0）" if m else "非管理職"
+            ),
             "ベース賃金": df_calc["annual_base"].apply(lambda v: f"{v:,} 万円"),
             "残業代": df_calc["annual_overtime"].apply(
                 lambda v: "0 万円（消滅）" if v == 0 else f"{v:,} 万円"
